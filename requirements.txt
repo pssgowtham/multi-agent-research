@@ -1,0 +1,20 @@
+# LangChain ecosystem — fully unpinned, let pip resolve
+langgraph
+langchain
+langchain-openai
+langchain-community
+
+# Everything else
+openai
+exa-py
+pinecone-client
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+tenacity
+slowapi
+sentry-sdk[fastapi]
+pytest
+httpx
