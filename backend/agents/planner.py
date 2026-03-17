@@ -17,9 +17,9 @@ def planner_node(state: dict) -> dict:
             that together will give comprehensive coverage of the topic.
             Return ONLY a numbered list of 3 search queries, nothing else.
             Example:
-            1. query one
-            2. query two
-            3. query three"""),
+            1. query one 
+            2. query two 
+            3. query three """),
             HumanMessage(content=f"Create a research plan for: {state['query']}")
         ]
 
