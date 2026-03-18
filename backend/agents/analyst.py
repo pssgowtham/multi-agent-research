@@ -1,7 +1,9 @@
+from backend.agents.researcher import ResearchState
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from backend.tools.memory import retrieve_research
 from backend.core.config import settings
+from backend.graph.state import ResearchState
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
@@ -9,7 +11,7 @@ llm = ChatOpenAI(
     api_key=settings.OPENAI_API_KEY
 )
 
-def analyst_node(state: dict) -> dict:
+def analyst_node(state: ResearchState) -> ResearchState:
     """Retrieves from Pinecone and produces structured insights."""
     try:
         # Retrieve most relevant chunks from Pinecone

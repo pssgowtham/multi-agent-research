@@ -1,8 +1,10 @@
+from backend.agents.researcher import ResearchState
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from backend.tools.search import exa_search
 from backend.tools.memory import store_research
 from backend.core.config import settings
+from backend.graph.state import ResearchState
 import uuid
 
 llm = ChatOpenAI(
@@ -11,7 +13,7 @@ llm = ChatOpenAI(
     api_key=settings.OPENAI_API_KEY
 )
 
-def search_node(state: dict) -> dict:
+def search_node(state: ResearchState) -> ResearchState:
     """Takes planner queries, searches Exa, stores results in Pinecone."""
     try:
         agent = create_react_agent(llm, tools=[exa_search])
