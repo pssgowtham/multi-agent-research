@@ -10,7 +10,12 @@ class ResearchState(TypedDict):
     search_results: str
     #analyst agent
     analyst_output: str
-    #shared
+    #writer agent
+    writer_output: str
+    #critic agent
+    critic_feedback: str
+    critic_approved: bool
+    #final answer
     final_answer: str
     iterations: int
     error: str
