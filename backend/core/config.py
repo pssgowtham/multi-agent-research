@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     SENTRY_DSN: str
     APP_ENV: str = "development"
     MAX_CRITIC_ITERATIONS: int = 3
+    GROQ_API_KEY: str
+
 
     class Config:
         env_file = ".env"
