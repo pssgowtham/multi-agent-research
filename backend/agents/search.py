@@ -5,6 +5,7 @@ from backend.tools.search import exa_search
 from backend.tools.memory import store_research
 from backend.core.config import settings
 from backend.graph.state import ResearchState
+from backend.tools.memory import retrieve_research
 import uuid
 
 llm = ChatOpenAI(
@@ -13,19 +14,24 @@ llm = ChatOpenAI(
     api_key=settings.OPENAI_API_KEY
 )
 
-def search_node(state: ResearchState) -> ResearchState:
-    """Takes planner queries, searches Exa, stores results in Pinecone."""
+
+def search_node(state: dict) -> dict:
     try:
         agent = create_react_agent(llm, tools=[exa_search])
         all_results = []
 
-        for query in state["search_queries"]:
+        for query in state["search_queries"][:2]:
+            # Check Pinecone cache first
+            cached = retrieve_research(query, top_k=1)
+            if cached and len(cached[0]) > 200:
+                all_results.append(f"Query: {query}\nFindings: {cached[0]}")
+                continue
+
+            # Only hit Exa if no cache
             result = agent.invoke({
                 "messages": [{"role": "user", "content": f"Search for: {query}"}]
             })
             content = result["messages"][-1].content
-
-            # Store in Pinecone
             store_research(
                 text=content,
                 metadata={
