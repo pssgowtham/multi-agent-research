@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     MAX_CRITIC_ITERATIONS: int = 3
     GROQ_API_KEY: str
+    DATABASE_URL: str
 
 
     class Config:

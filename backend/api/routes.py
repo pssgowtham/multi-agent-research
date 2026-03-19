@@ -1,10 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 from backend.graph.research_graph import run_research
 from backend.core.guards import validate_input, validate_output
+from backend.db.database import get_db
+from backend.db.models import ResearchHistory
 import json
 import asyncio
+import time
 
 router = APIRouter()
 
@@ -13,28 +18,9 @@ class ResearchRequest(BaseModel):
     query: str
 
 
-async def research_stream(query: str):
+async def research_stream(query: str, db: AsyncSession):
     """Async generator that streams agent progress via SSE."""
     try:
-        # Stream agent status updates
-        agents = ["planner", "search", "analyst", "writer", "critic"]
-        
-        def on_agent_start(agent: str):
-            return f"data: {json.dumps({'type': 'agent_start', 'agent': agent})}\n\n"
-        
-        def on_agent_end(agent: str):
-            return f"data: {json.dumps({'type': 'agent_end', 'agent': agent})}\n\n"
-
-        # Run graph with streaming callbacks
-        import time
-        start_times = {}
-
-        loop = asyncio.get_event_loop()
-        
-        # Send start event
-        yield f"data: {json.dumps({'type': 'start', 'message': 'Research started'})}\n\n"
-
-        # Run each agent and stream progress
         from backend.agents.planner import planner_node
         from backend.agents.search import search_node
         from backend.agents.analyst import analyst_node
@@ -57,6 +43,9 @@ async def research_stream(query: str):
         }
 
         timeline = {}
+        loop = asyncio.get_event_loop()
+
+        yield f"data: {json.dumps({'type': 'start', 'message': 'Research started'})}\n\n"
 
         for agent_name, agent_fn in [
             ("planner", planner_node),
@@ -76,47 +65,99 @@ async def research_stream(query: str):
                 yield f"data: {json.dumps({'type': 'error', 'message': state['error']})}\n\n"
                 return
 
-        # Send final result
-        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline}})}\n\n"
+        # Validate output
+        output_check = validate_output(
+            output=state["final_answer"],
+            source_material=state["search_results"]
+        )
+        if not output_check["ok"]:
+            yield f"data: {json.dumps({'type': 'error', 'message': output_check['reason']})}\n\n"
+            return
+
+        # Save to Supabase
+        record = ResearchHistory(
+            query=query,
+            final_answer=state["final_answer"],
+            search_queries=state["search_queries"],
+            timeline=timeline,
+            critic_approved=state["critic_approved"],
+            iterations=state["iterations"]
+        )
+        db.add(record)
+        await db.commit()
+        await db.refresh(record)
+
+        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline, 'id': str(record.id)}})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
 
-@router.post("/research")
-async def research(req: ResearchRequest):
-    """Standard JSON endpoint — used for history retrieval."""
-    input_check = validate_input(req.query)
-    if not input_check["ok"]:
-        raise HTTPException(status_code=400, detail=input_check["reason"])
-
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, __import__('backend.graph.research_graph', fromlist=['run_research']).run_research, req.query
-    )
-
-    output_check = validate_output(
-        output=result["final_answer"],
-        source_material=result["search_results"]
-    )
-    if not output_check["ok"]:
-        raise HTTPException(status_code=500, detail=output_check["reason"])
-
-    return result
-
-
 @router.post("/research/stream")
-async def research_stream_endpoint(req: ResearchRequest):
-    """SSE streaming endpoint — streams agent progress live."""
+async def research_stream_endpoint(
+    req: ResearchRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """SSE streaming endpoint."""
     input_check = validate_input(req.query)
     if not input_check["ok"]:
         raise HTTPException(status_code=400, detail=input_check["reason"])
 
     return StreamingResponse(
-        research_stream(req.query),
+        research_stream(req.query, db),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@router.get("/history")
+async def get_history(
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get past research queries."""
+    result = await db.execute(
+        select(ResearchHistory)
+        .order_by(desc(ResearchHistory.created_at))
+        .limit(limit)
+    )
+    records = result.scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "query": r.query,
+            "critic_approved": r.critic_approved,
+            "iterations": r.iterations,
+            "timeline": r.timeline,
+            "created_at": r.created_at.isoformat()
+        }
+        for r in records
+    ]
+
+
+@router.get("/history/{id}")
+async def get_history_item(
+    id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific past research report."""
+    result = await db.execute(
+        select(ResearchHistory).where(ResearchHistory.id == id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {
+        "id": str(record.id),
+        "query": record.query,
+        "final_answer": record.final_answer,
+        "search_queries": record.search_queries,
+        "timeline": record.timeline,
+        "critic_approved": record.critic_approved,
+        "iterations": record.iterations,
+        "created_at": record.created_at.isoformat()
+    }
