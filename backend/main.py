@@ -1,36 +1,34 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from backend.graph.research_graph import run_research
-from backend.core.guards import validate_input, validate_output
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from backend.api.routes import router
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(title="Multi-Agent Research API")
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-class ResearchRequest(BaseModel):
-    query: str
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",   # React dev server
+        "http://localhost:3000",   # fallback
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routes
+app.include_router(router, prefix="/api/v1")
 
 
 @app.get("/health")
-def health():
+async def health():
     return {"status": "ok"}
-
-
-@app.post("/research")
-def research(req: ResearchRequest):
-    # Input guard
-    input_check = validate_input(req.query)
-    if not input_check["ok"]:
-        raise HTTPException(status_code=400, detail=input_check["reason"])
-
-    # Run the pipeline
-    result = run_research(req.query)
-
-    # Output guard
-    output_check = validate_output(
-        output=result["final_answer"],
-        source_material=result["search_results"]
-    )
-    if not output_check["ok"]:
-        raise HTTPException(status_code=500, detail=output_check["reason"])
-
-    return result
