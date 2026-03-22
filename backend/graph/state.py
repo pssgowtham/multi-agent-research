@@ -4,6 +4,7 @@ import operator
 class ResearchState(TypedDict):
     query: str
     #planner agent
+    report_type: str
     search_queries: list[str]
     planner_output: str
     #search agent

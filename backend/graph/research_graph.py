@@ -51,6 +51,7 @@ def run_research(query: str) -> dict:
     graph = build_research_graph()
     return graph.invoke({
         "query": query,
+        "report_type": report_type,
         "search_queries": [],
         "planner_output": "",
         "search_results": "",

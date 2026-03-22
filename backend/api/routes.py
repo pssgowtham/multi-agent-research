@@ -16,9 +16,10 @@ router = APIRouter()
 
 class ResearchRequest(BaseModel):
     query: str
+    report_type: str = "executive"
 
 
-async def research_stream(query: str, db: AsyncSession):
+async def research_stream(query: str, report_type: str, db: AsyncSession):
     """Async generator that streams agent progress via SSE."""
     try:
         from backend.agents.planner import planner_node
@@ -30,6 +31,7 @@ async def research_stream(query: str, db: AsyncSession):
 
         state: ResearchState = {
             "query": query,
+            "report_type": report_type,
             "search_queries": [],
             "planner_output": "",
             "search_results": "",
@@ -70,9 +72,7 @@ async def research_stream(query: str, db: AsyncSession):
             output=state["final_answer"],
             source_material=state["search_results"]
         )
-        if not output_check["ok"]:
-            yield f"data: {json.dumps({'type': 'error', 'message': output_check['reason']})}\n\n"
-            return
+        warning = None if output_check["ok"] else output_check["reason"]
 
         # Save to Supabase
         record = ResearchHistory(
@@ -87,7 +87,7 @@ async def research_stream(query: str, db: AsyncSession):
         await db.commit()
         await db.refresh(record)
 
-        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline, 'id': str(record.id)}})}\n\n"
+        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline, 'id': str(record.id), 'warning': warning}})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as e:
@@ -105,7 +105,7 @@ async def research_stream_endpoint(
         raise HTTPException(status_code=400, detail=input_check["reason"])
 
     return StreamingResponse(
-        research_stream(req.query, db),
+        research_stream(req.query, req.report_type, db),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

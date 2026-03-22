@@ -5,7 +5,7 @@ from backend.core.config import settings
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
-    temperature=0,
+    temperature=0.3,
     api_key=settings.OPENAI_API_KEY
 )
 
@@ -18,6 +18,10 @@ def critic_node(state: ResearchState) -> ResearchState:
             1. Completeness — does it cover the topic thoroughly?
             2. Accuracy — are claims supported by the research?
             3. Clarity — is it well structured and easy to read?
+
+            Be reasonable — a good report doesn't need to be perfect.
+            Approve if it adequately covers the topic with clear writing.
+            Only reject if there are significant factual errors or major gaps.
 
             Respond in exactly this format:
             APPROVED: true or false
