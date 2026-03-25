@@ -84,3 +84,4 @@ sse-starlette
 weasyprint
 asyncpg
 sqlalchemy[asyncio]
+markdown
