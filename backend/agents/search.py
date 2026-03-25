@@ -1,35 +1,36 @@
-from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
-from backend.tools.search import exa_search
+from exa_py import Exa
 from backend.tools.memory import store_research, retrieve_research
 from backend.core.config import settings
 from backend.graph.state import ResearchState
 import uuid
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0,
-    api_key=settings.OPENAI_API_KEY
-)
-
+exa = Exa(api_key=settings.EXA_API_KEY)
 
 def search_node(state: ResearchState) -> ResearchState:
     try:
-        agent = create_react_agent(llm, tools=[exa_search])
         all_results = []
 
         for query in state["search_queries"]:
-            # Check Pinecone cache first — only use if highly relevant
-            cached = retrieve_research(query, top_k=1, min_score=0.65)
-            if cached and len(cached[0]) > 200:
-                all_results.append(f"Query: {query}\nFindings: {cached[0]}")
-                continue
+            # Check Pinecone cache — skip for time sensitive topics
+            if not is_time_sensitive(state["query"]):
+                cached = retrieve_research(state["query"], top_k=1, min_score=0.65)
+                if cached and len(cached[0]) > 200:
+                    all_results.append(f"Query: {query}\nFindings: {cached[0]}")
+                    continue
 
-            # Only hit Exa if no cache
-            result = agent.invoke({
-                "messages": [{"role": "user", "content": f"Search for: {query}"}]
-            })
-            content = result["messages"][-1].content
+            # Direct Exa call — no LLM involved
+            results = exa.search_and_contents(
+                query,
+                num_results=5,
+                text={"max_characters": 1000}
+            )
+
+            content = "\n---\n".join([
+                f"Title: {r.title}\nURL: {r.url}\nContent: {r.text}"
+                for r in results.results
+            ])
+
+            # Store raw results in Pinecone
             store_research(
                 text=content,
                 metadata={
@@ -38,6 +39,7 @@ def search_node(state: ResearchState) -> ResearchState:
                     "original_topic": state["query"]
                 }
             )
+
             all_results.append(f"Query: {query}\nFindings: {content}")
 
         return {
@@ -47,3 +49,12 @@ def search_node(state: ResearchState) -> ResearchState:
         }
     except Exception as e:
         return {**state, "error": str(e)}
+
+
+TIME_SENSITIVE_KEYWORDS = [
+    'ipl', 'cricket', 'stock', 'price', 'war', 'election',
+    'news', 'today', 'latest', 'current', 'match', 'score'
+]
+
+def is_time_sensitive(query: str) -> bool:
+    return any(kw in query.lower() for kw in TIME_SENSITIVE_KEYWORDS)

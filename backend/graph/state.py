@@ -2,21 +2,31 @@ from typing import TypedDict, Annotated
 import operator
 
 class ResearchState(TypedDict):
+    # Input
     query: str
-    #planner agent
     report_type: str
-    search_queries: list[str]
+    report_length: str          # "concise" | "medium" | "long"
+    is_time_sensitive: bool     # skips Pinecone cache if True
+
+    # Planner
+    search_queries: list
     planner_output: str
-    #search agent
+
+    # Search
     search_results: str
-    #analyst agent
+
+    # Analyst
+    analyst_structured: dict    # cleaned data, stats, contradictions, trends
     analyst_output: str
-    #writer agent
+
+    # Writer
     writer_output: str
-    #critic agent
+
+    # Critic
     critic_feedback: str
     critic_approved: bool
-    #final answer
+
+    # Shared
     final_answer: str
     iterations: int
     error: str

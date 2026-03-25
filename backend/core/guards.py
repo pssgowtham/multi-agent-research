@@ -92,6 +92,46 @@ def validate_input(query: str) -> dict:
 
 def validate_output(output: str, source_material: str) -> dict:
     """Check output for toxicity and fact grounding."""
+    # Toxicity check
+    mod = check_moderation(output)
+    if mod["flagged"]:
+        return {"ok": False, "reason": f"Output flagged: {list(mod['categories'].keys())}"}
+
+    # Fact check — only flag direct contradictions not missing confirmations
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0,
+        messages=[
+            {"role": "system", "content": """You are a fact checker.
+            Check if the report contains claims that DIRECTLY CONTRADICT the source material.
+            Do NOT flag a claim just because it is not explicitly confirmed in the sources.
+            Only flag if the report says X but the sources clearly say NOT X.
+            Respond in exactly this format:
+            GROUNDED: true or false
+            REASON: one sentence or 'None'"""},
+            {"role": "user", "content": f"""
+            Source material:
+            {source_material[:2000]}
+
+            Report to fact check:
+            {output[:2000]}
+            """}
+        ]
+    )
+    content = response.choices[0].message.content.strip()
+    grounded = True
+    reason = "None"
+    for line in content.split("\n"):
+        if line.startswith("GROUNDED:"):
+            grounded = "true" in line.lower()
+        elif line.startswith("REASON:"):
+            reason = line.replace("REASON:", "").strip()
+
+    if not grounded:
+        return {"ok": False, "reason": f"Output contradicts sources: {reason}"}
+
+    return {"ok": True, "reason": ""}
+    """Check output for toxicity and fact grounding."""
     # Toxic content
     mod = check_moderation(output)
     if mod["flagged"]:

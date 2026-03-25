@@ -3,7 +3,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from backend.graph.research_graph import run_research
 from backend.core.guards import validate_input, validate_output
 from backend.db.database import get_db
 from backend.db.models import ResearchHistory
@@ -17,10 +16,10 @@ router = APIRouter()
 class ResearchRequest(BaseModel):
     query: str
     report_type: str = "executive"
+    report_length: str = "medium"
 
 
-async def research_stream(query: str, report_type: str, db: AsyncSession):
-    """Async generator that streams agent progress via SSE."""
+async def research_stream(query: str, report_type: str, report_length: str, db: AsyncSession):
     try:
         from backend.agents.planner import planner_node
         from backend.agents.search import search_node
@@ -32,9 +31,12 @@ async def research_stream(query: str, report_type: str, db: AsyncSession):
         state: ResearchState = {
             "query": query,
             "report_type": report_type,
+            "report_length": report_length,
+            "is_time_sensitive": False,
             "search_queries": [],
             "planner_output": "",
             "search_results": "",
+            "analyst_structured": {},
             "analyst_output": "",
             "writer_output": "",
             "critic_feedback": "",
@@ -67,7 +69,7 @@ async def research_stream(query: str, report_type: str, db: AsyncSession):
                 yield f"data: {json.dumps({'type': 'error', 'message': state['error']})}\n\n"
                 return
 
-        # Validate output
+        # Output guard
         output_check = validate_output(
             output=state["final_answer"],
             source_material=state["search_results"]
@@ -99,13 +101,12 @@ async def research_stream_endpoint(
     req: ResearchRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """SSE streaming endpoint."""
     input_check = validate_input(req.query)
     if not input_check["ok"]:
         raise HTTPException(status_code=400, detail=input_check["reason"])
 
     return StreamingResponse(
-        research_stream(req.query, req.report_type, db),
+        research_stream(req.query, req.report_type, req.report_length, db),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -119,7 +120,6 @@ async def get_history(
     limit: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get past research queries."""
     result = await db.execute(
         select(ResearchHistory)
         .order_by(desc(ResearchHistory.created_at))
@@ -144,7 +144,6 @@ async def get_history_item(
     id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific past research report."""
     result = await db.execute(
         select(ResearchHistory).where(ResearchHistory.id == id)
     )

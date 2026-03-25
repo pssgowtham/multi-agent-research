@@ -20,14 +20,13 @@ def store_research(text: str, metadata: dict) -> None:
     }])
 
 def retrieve_research(query: str, top_k: int = 5, min_score: float = 0.65) -> list:
-    """Retrieve most relevant research from Pinecone with score threshold."""
+    """Retrieve from Pinecone — only use cache if score is high enough."""
     vector = embeddings.embed_query(query)
     results = index.query(
         vector=vector,
         top_k=top_k,
         include_metadata=True
     )
-    # Only return results above similarity threshold
     filtered = [
         r["metadata"]["text"]
         for r in results["matches"]
