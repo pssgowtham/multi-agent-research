@@ -4,6 +4,17 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from backend.api.routes import router
+from backend.core.config import settings
+import sentry_sdk
+
+# Init Sentry
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.5,
+        environment=settings.APP_ENV
+    )
+
 
 limiter = Limiter(key_func=get_remote_address)
 
