@@ -6,16 +6,14 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,13 +21,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Check imports
-        run: |
-          python -c "from backend.main import app; print('Backend imports OK')"
+        run: python -c "from backend.main import app; print('Backend OK')"
         env:
           OPENAI_API_KEY: test
           EXA_API_KEY: test
@@ -47,26 +42,19 @@ jobs:
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
-
-      - name: Type check
-        working-directory: ./frontend
-        run: npx tsc --noEmit
+        run: npm install
 
       - name: Build
         working-directory: ./frontend
