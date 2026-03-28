@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check imports
+        run: |
+          python -c "from backend.main import app; print('Backend imports OK')"
+        env:
+          OPENAI_API_KEY: test
+          EXA_API_KEY: test
+          PINECONE_API_KEY: test
+          PINECONE_INDEX_NAME: test
+          LANGCHAIN_API_KEY: test
+          LANGCHAIN_TRACING_V2: "false"
+          LANGCHAIN_PROJECT: test
+          SENTRY_DSN: ""
+          GROQ_API_KEY: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          APP_ENV: test
+          MAX_CRITIC_ITERATIONS: "3"
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_SENTRY_DSN: ""
