@@ -14,8 +14,12 @@ engine = create_async_engine(
     echo=False,
     connect_args={
         "ssl": ssl_context,
-        "statement_cache_size": 0  # required for Supabase transaction pooler
-    }
+        "statement_cache_size": 0
+    },
+    pool_pre_ping=True,        # ← checks connection before using it
+    pool_recycle=300,          # ← recycle connections every 5 minutes
+    pool_size=5,               # ← max 5 connections
+    max_overflow=10            # ← allow 10 overflow connections
 )
 
 AsyncSessionLocal = sessionmaker(
