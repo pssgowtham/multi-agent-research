@@ -30,6 +30,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",   # React dev server
         "http://localhost:3000",   # fallback
+        "https://multi-agent-research-ruddy.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
