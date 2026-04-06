@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { ReportTypeSelector } from '@/components/ReportTypeSelector'
 import { ReportLengthSelector } from '@/components/ReportLengthSelector'
 import axios from 'axios'
+import { API_URL } from '@/config'
 
 const cleanQuery = (raw: string) => {
   return raw
@@ -51,7 +52,7 @@ function App() {
   const handleHistorySelect = async (id: string, q: string) => {
     reset()
     setQuery(q)
-    const res = await axios.get(`http://localhost:8000/api/v1/history/${id}`)
+    const res = await axios.get(`${API_URL}/api/v1/history/${id}`)
     setHistoryResult(res.data)
   }
 

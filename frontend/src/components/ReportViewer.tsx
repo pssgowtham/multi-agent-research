@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { ResearchResult } from '@/hooks/useStream'
 import remarkGfm from 'remark-gfm'
+import { API_URL } from '@/config'
 
 interface Props {
   result: ResearchResult & { warning?: string; id?: string }
@@ -18,12 +19,12 @@ export function ReportViewer({ result }: Props) {
 
   const handleDownloadPDF = () => {
     if (!result.id) return
-    window.open(`http://localhost:8000/api/v1/report/${result.id}/pdf`, '_blank')
+    window.open(`${API_URL}/api/v1/report/${result.id}/pdf`, '_blank')
   }
 
   const handleDownloadMarkdown = () => {
     if (!result.id) return
-    window.open(`http://localhost:8000/api/v1/report/${result.id}/markdown`, '_blank')
+    window.open(`${API_URL}/api/v1/report/${result.id}/markdown`, '_blank')
   }
 
   const wordCount = result.final_answer.trim().split(/\s+/).length

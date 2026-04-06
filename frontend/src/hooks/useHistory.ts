@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+import { API_URL } from '@/config'
 
 interface HistoryItem {
   id: string
@@ -14,7 +15,7 @@ export function useHistory() {
   return useQuery<HistoryItem[]>({
     queryKey: ['history'],
     queryFn: async () => {
-      const res = await axios.get('http://localhost:8000/api/v1/history')
+      const res = await axios.get(`${API_URL}/api/v1/history`)
       return res.data
     },
     staleTime: 30000

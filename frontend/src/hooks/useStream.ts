@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { API_URL } from '@/config'
 
 export interface AgentUpdate {
   agent: string
@@ -35,7 +36,7 @@ export function useStream() {
     setState({ status: 'streaming', agents: [], result: null, error: null })
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/research/stream', {
+      const response = await fetch(`${API_URL}/api/v1/research/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, report_type: reportType, report_length: reportLength })
