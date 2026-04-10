@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func, delete as sa_delete, update as sa_update
 from backend.core.guards import validate_input, validate_output
 from backend.db.database import get_db
 from backend.db.models import ResearchHistory
 import json
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from fastapi.responses import StreamingResponse, Response
 import markdown
 import io
@@ -85,13 +86,15 @@ async def research_stream(query: str, report_type: str, report_length: str, db: 
             search_queries=state["search_queries"],
             timeline=timeline,
             critic_approved=state["critic_approved"],
-            iterations=state["iterations"]
+            iterations=state["iterations"],
+            report_type=report_type,
+            report_length=report_length,
         )
         db.add(record)
         await db.commit()
         await db.refresh(record)
 
-        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline, 'id': str(record.id), 'warning': warning}})}\n\n"
+        yield f"data: {json.dumps({'type': 'result', 'data': {**state, 'timeline': timeline, 'id': str(record.id), 'warning': warning, 'report_type': report_type, 'report_length': report_length}})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as e:
@@ -120,25 +123,50 @@ async def research_stream_endpoint(
 @router.get("/history")
 async def get_history(
     limit: int = 10,
+    offset: int = 0,
+    search: str = Query(default=None, description="Search query text"),
+    bookmarked: bool = Query(default=None, description="Filter bookmarked only"),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(ResearchHistory)
-        .order_by(desc(ResearchHistory.created_at))
-        .limit(limit)
-    )
+    query = select(ResearchHistory).order_by(desc(ResearchHistory.created_at))
+
+    if search:
+        query = query.where(ResearchHistory.query.ilike(f"%{search}%"))
+    if bookmarked is not None:
+        query = query.where(ResearchHistory.is_bookmarked == bookmarked)
+
+    # Get total count for pagination
+    count_query = select(func.count()).select_from(ResearchHistory)
+    if search:
+        count_query = count_query.where(ResearchHistory.query.ilike(f"%{search}%"))
+    if bookmarked is not None:
+        count_query = count_query.where(ResearchHistory.is_bookmarked == bookmarked)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    result = await db.execute(query.offset(offset).limit(limit))
     records = result.scalars().all()
-    return [
-        {
-            "id": str(r.id),
-            "query": r.query,
-            "critic_approved": r.critic_approved,
-            "iterations": r.iterations,
-            "timeline": r.timeline,
-            "created_at": r.created_at.isoformat()
-        }
-        for r in records
-    ]
+
+    return {
+        "items": [
+            {
+                "id": str(r.id),
+                "query": r.query,
+                "critic_approved": r.critic_approved,
+                "iterations": r.iterations,
+                "timeline": r.timeline,
+                "report_type": getattr(r, 'report_type', None) or "executive",
+                "report_length": getattr(r, 'report_length', None) or "medium",
+                "is_bookmarked": getattr(r, 'is_bookmarked', False),
+                "created_at": r.created_at.isoformat()
+            }
+            for r in records
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/history/{id}")
@@ -160,8 +188,101 @@ async def get_history_item(
         "timeline": record.timeline,
         "critic_approved": record.critic_approved,
         "iterations": record.iterations,
+        "report_type": getattr(record, 'report_type', None) or "executive",
+        "report_length": getattr(record, 'report_length', None) or "medium",
+        "is_bookmarked": getattr(record, 'is_bookmarked', False),
         "created_at": record.created_at.isoformat()
     }
+
+
+@router.delete("/history/{id}")
+async def delete_history_item(
+    id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a research history record."""
+    result = await db.execute(
+        select(ResearchHistory).where(ResearchHistory.id == id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    await db.execute(
+        sa_delete(ResearchHistory).where(ResearchHistory.id == id)
+    )
+    await db.commit()
+    return {"ok": True, "message": "Report deleted"}
+
+
+@router.patch("/history/{id}/bookmark")
+async def toggle_bookmark(
+    id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Toggle bookmark status of a research record."""
+    result = await db.execute(
+        select(ResearchHistory).where(ResearchHistory.id == id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    new_value = not (getattr(record, 'is_bookmarked', False) or False)
+    await db.execute(
+        sa_update(ResearchHistory)
+        .where(ResearchHistory.id == id)
+        .values(is_bookmarked=new_value)
+    )
+    await db.commit()
+    return {"ok": True, "is_bookmarked": new_value}
+
+
+@router.get("/stats")
+async def get_stats(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get aggregated research statistics."""
+    # Total count
+    total_result = await db.execute(
+        select(func.count()).select_from(ResearchHistory)
+    )
+    total_researches = total_result.scalar() or 0
+
+    # Approval rate
+    approved_result = await db.execute(
+        select(func.count()).select_from(ResearchHistory)
+        .where(ResearchHistory.critic_approved == True)
+    )
+    approved_count = approved_result.scalar() or 0
+    approval_rate = (approved_count / total_researches * 100) if total_researches > 0 else 0
+
+    # Average duration (sum of timeline values)
+    all_records = await db.execute(
+        select(ResearchHistory.timeline).where(ResearchHistory.timeline.isnot(None))
+    )
+    timelines = all_records.scalars().all()
+    total_durations = []
+    for tl in timelines:
+        if tl and isinstance(tl, dict):
+            total_durations.append(sum(tl.values()))
+    avg_duration = sum(total_durations) / len(total_durations) if total_durations else 0
+
+    # This week count
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    week_result = await db.execute(
+        select(func.count()).select_from(ResearchHistory)
+        .where(ResearchHistory.created_at >= week_ago)
+    )
+    total_this_week = week_result.scalar() or 0
+
+    return {
+        "total_researches": total_researches,
+        "approval_rate": round(approval_rate, 1),
+        "avg_duration": round(avg_duration, 1),
+        "total_this_week": total_this_week,
+    }
+
 
 @router.get("/report/{id}/pdf")
 async def download_pdf(
@@ -304,4 +425,3 @@ async def download_markdown(
             "Content-Disposition": f'attachment; filename="{filename}.md"'
         }
     )
-

@@ -3,17 +3,31 @@ import ReactMarkdown from 'react-markdown'
 import type { ResearchResult } from '@/hooks/useStream'
 import remarkGfm from 'remark-gfm'
 import { API_URL } from '@/config'
+import {
+  Copy,
+  Check,
+  Download,
+  FileText,
+  FileDown,
+  AlertTriangle,
+  BookOpen,
+  Clock,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react'
 
 interface Props {
   result: ResearchResult & { warning?: string; id?: string }
+  onCopy?: () => void
 }
 
-export function ReportViewer({ result }: Props) {
+export function ReportViewer({ result, onCopy }: Props) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(result.final_answer)
     setCopied(true)
+    onCopy?.()
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -31,45 +45,65 @@ export function ReportViewer({ result }: Props) {
   const readTime = Math.ceil(wordCount / 200)
 
   return (
-    <div className="border rounded-xl overflow-hidden">
+    <div className="border rounded-2xl overflow-hidden bg-card animate-scale-in">
+      {/* Warning banner */}
       {result.warning && (
-        <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 dark:bg-amber-950 dark:border-amber-800">
+        <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 dark:bg-amber-950/50 dark:border-amber-800 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            ⚠️ {result.warning}
+            {result.warning}
           </p>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-card">
-        <div className="flex items-center gap-4">
-          <span className="text-base font-semibold">Research Report</span>
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-            {wordCount} words
-          </span>
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-            {readTime} min read
-          </span>
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+            <BookOpen className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <span className="text-sm font-semibold">Research Report</span>
+            <div className="flex items-center gap-3 mt-0.5">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <FileText className="w-3 h-3" />
+                {wordCount} words
+              </span>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                {readTime} min read
+              </span>
+              {result.critic_approved !== undefined && (
+                <span className={`flex items-center gap-1 text-xs ${result.critic_approved ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {result.critic_approved ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                  {result.critic_approved ? 'Approved' : `${result.iterations} iterations`}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={handleCopy}
-            className="text-xs px-3 py-1.5 rounded-lg border hover:bg-accent transition-colors"
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border hover:bg-accent transition-colors"
           >
-            {copied ? '✓ Copied' : 'Copy'}
+            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? 'Copied' : 'Copy'}
           </button>
           {result.id && (
             <>
               <button
                 onClick={handleDownloadMarkdown}
-                className="text-xs px-3 py-1.5 rounded-lg border hover:bg-accent transition-colors"
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border hover:bg-accent transition-colors"
               >
+                <FileDown className="w-3.5 h-3.5" />
                 .md
               </button>
               <button
                 onClick={handleDownloadPDF}
-                className="text-xs px-3 py-1.5 rounded-lg border hover:bg-accent transition-colors"
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-500 hover:to-purple-500 transition-all"
               >
+                <Download className="w-3.5 h-3.5" />
                 PDF
               </button>
             </>

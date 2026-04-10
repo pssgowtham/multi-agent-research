@@ -14,4 +14,7 @@ class ResearchHistory(Base):
     timeline = Column(JSONB, nullable=True)
     critic_approved = Column(Boolean, default=False)
     iterations = Column(Integer, default=0)
+    report_type = Column(String, nullable=True, default="executive")
+    report_length = Column(String, nullable=True, default="medium")
+    is_bookmarked = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
